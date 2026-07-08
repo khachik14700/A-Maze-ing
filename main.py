@@ -16,9 +16,10 @@ def main() -> None:
         maze = MazeGenerator(config.WIDTH, config.HEIGHT,
                              config.ENTRY, config.EXIT,
                              config.OUTPUT_FILE, config.SEED)
-        maze.generate()
         maze._apply_pattern_42()
+        maze.generate()
         maze.print_maze()
+        maze.export_to_hex()
     except Exception as er:
         print(er)
 

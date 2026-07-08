@@ -155,15 +155,22 @@ class MazeGenerator:
 
     def _apply_pattern_42(self) -> None:
         pattern_coords = [
-            (-1, 0), (-1, -1), (-1, -2), (-2, 0), (-3, 0), (-3, 1), (-3, 2),
-            (1, 0), (1, -1), (1, -2), (2, -2), (3, -2), (2, 0), (3, 0),
-            (3, 1), (3, 2), (2, 2), (1, 2)
+            (-1, 0), (-1, 1), (-1, 2), (-2, 0), (-3, 0), (-3, -1), (-3, -2),
+            (1, 0), (3, -1), (1, -2), (2, -2), (3, -2), (2, 0), (3, 0),
+            (1, 1), (3, 2), (2, 2), (1, 2)
         ]
 
         center_y = self.height // 2
         center_x = self.width // 2
 
-        if center_x + 7 >= self.width or center_y + 3 >= self.height:
+        dx_coords = [p[0] for p in pattern_coords]
+        dy_coords = [p[1] for p in pattern_coords]
+
+        min_dy, max_dy = min(dy_coords), max(dy_coords)
+        min_dx, max_dx = min(dx_coords), max(dx_coords)
+
+        if (center_y + min_dy < 0 or center_y + max_dy >= self.height or
+           center_x + min_dx < 0 or center_x + max_dx >= self.width):
             raise ValueError("Maze is too small to fit the '42' pattern.")
 
         for dx, dy in pattern_coords:
@@ -171,11 +178,7 @@ class MazeGenerator:
             if 0 <= x < self.width and 0 <= y < self.height:
                 cell = self.grid[y][x]
                 cell.north = cell.east = cell.south = cell.west = True
-                cell.visited = False
-
-        if not self.solve():
-            raise ValueError("Pattern '42' blocked the path! Try "
-                             "a different location or size.")
+                cell.visited = True
 
     def export_to_hex(self) -> None:
         with open(self.output_file, 'w') as file:
@@ -192,21 +195,21 @@ class MazeGenerator:
     def print_maze(self) -> None:
         center_y, center_x = self.height // 2, self.width // 2
         pattern_coords = [
-            (-1, 0), (-1, -1), (-1, -2), (-2, 0), (-3, 0), (-3, 1), (-3, 2),
-            (1, 0), (1, -1), (1, -2), (2, -2), (3, -2), (2, 0), (3, 0),
-            (3, 1), (3, 2), (2, 2), (1, 2)
+            (-1, 0), (-1, 1), (-1, 2), (-2, 0), (-3, 0), (-3, -1), (-3, -2),
+            (1, 0), (3, -1), (1, -2), (2, -2), (3, -2), (2, 0), (3, 0),
+            (1, 1), (3, 2), (2, 2), (1, 2)
         ]
 
-        print("#" * (self.width * 2 + 1))
+        print("\u2588" * (self.width * 2 + 1))
         for y in range(self.height):
-            row = "#"
+            row = "\u2588"
             for x in range(self.width):
                 is_42 = (x - center_x, y - center_y) in pattern_coords
-                char = "*" if is_42 else (" " if not self.grid[y][x].east else "#")
-                row += ("*" if is_42 else " ") + ("#" if self.grid[y][x].east else " ")
+                char = " " if is_42 else (" " if not self.grid[y][x].east else "\u2588")
+                row += (" " if is_42 else " ") + ("\u2588" if self.grid[y][x].east else " ")
             print(row)
 
-            row_bottom = "#"
+            row_bottom = "\u2588"
             for x in range(self.width):
-                row_bottom += ("#" if self.grid[y][x].south else " ") + "#"
+                row_bottom += ("\u2588" if self.grid[y][x].south else " ") + "\u2588"
             print(row_bottom)
