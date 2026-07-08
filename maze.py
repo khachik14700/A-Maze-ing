@@ -1,5 +1,7 @@
 import random
 from collections import deque
+import os
+import time
 
 
 class Cell:
@@ -25,11 +27,10 @@ class MazeGenerator:
         self.exit = exit
         self.output_file = output_file
         self.perfect = perfect
+        self.generation_steps: list[tuple[int, int, int, int, str]] = []
 
         if seed is not None:
             random.seed(seed)
-
-        self.grid = [[Cell() for _ in range(width)] for _ in range(height)]
 
     def get_unvisited_neighbours(
             self, x: int, y: int
@@ -74,6 +75,7 @@ class MazeGenerator:
             neighbour.east = False
 
     def _generate_dfs(self) -> None:
+        self.generation_steps = []
         try:
             stack = []
 
@@ -97,6 +99,7 @@ class MazeGenerator:
                     self.remove_wall(x, y, nx, ny, direction)
                     self.grid[ny][nx].visited = True
                     stack.append((nx, ny))
+                    self.generation_steps.append((x, y, nx, ny, direction))
                 else:
                     stack.pop()
         except IndexError as er:
@@ -188,6 +191,11 @@ class MazeGenerator:
                 cell.pattern = True
 
     def export_to_hex(self) -> None:
+        path = self.solve()
+        if not path:
+            raise ValueError("Cannot export: maze has no valid solution "
+                             "path between entry and exit.")
+
         with open(self.output_file, 'w') as file:
             for y in range(0, self.height):
                 row_string = ""
@@ -198,10 +206,10 @@ class MazeGenerator:
                     row_string += hex(val)[2:]
                 file.write(f"{row_string}\n")
 
-    def _remove_dead_ends(self) -> None:
-        dead_ends: list[tuple[int, int]] = self._find_all_dead_ends()
-        for x, y in dead_ends:
-            self._break_one_wall(x, y)
+            file.write('\n')
+            file.write(f"{self.entry[0]},{self.entry[1]}\n")
+            file.write(f"{self.exit[0]},{self.exit[1]}\n")
+            file.write(f"{self._path_to_directions(path)}\n")
 
     def _find_all_dead_ends(self) -> list[tuple[int, int]]:
         result: list[tuple[int, int]] = []
@@ -239,6 +247,7 @@ class MazeGenerator:
             else:
                 x2, y2 = x - 1, y
             self.remove_wall(x, y, x2, y2, direction)
+            self.generation_steps.append((x, y, x2, y2, direction))
 
     def _validate_entry_exit(self) -> None:
         entry_x, entry_y = self.entry
@@ -253,20 +262,48 @@ class MazeGenerator:
         while True:
             dead_ends = self._find_all_dead_ends()
             if not dead_ends:
-                break
+                return
             for x, y in dead_ends:
                 self._break_one_wall(x, y)
 
+            if self._find_all_dead_ends() == dead_ends:
+                break
+
+    def _safe_remove_wall(self, x: int, y: int, direction: str) -> None:
+        offsets = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
+        if direction not in offsets:
+            return
+
+        dx, dy = offsets[direction]
+        nx, ny = x + dx, y + dy
+
+        if not (0 <= nx < self.width and 0 <= ny < self.height):
+            return
+        if self.grid[y][x].pattern or self.grid[ny][nx].pattern:
+            return
+
+        self.remove_wall(x, y, nx, ny, direction)
+        self.generation_steps.append((x, y, nx, ny, direction))
+
     def _open_corners_and_center(self) -> None:
-        corners = [(0, 0), (0, self.height - 1), (self.width - 1, 0),
-                   (self.width - 1, self.height - 1)]
-        center = (self.width // 2, self.height // 2)
+        directions_by_corner = {
+            (0, 0): ["E", "S"],
+            (self.width - 1, 0): ["W", "S"],
+            (0, self.height - 1): ["E", "N"],
+            (self.width - 1, self.height - 1): ["W", "N"],
+        }
 
-        for x, y in corners + [center]:
-            cell = self.grid[y][x]
-            cell.north = cell.east = cell.south = cell.west = False
+        for (x, y), directions in directions_by_corner.items():
+            for direction in directions:
+                self._safe_remove_wall(x, y, direction)
 
-    def generate(self, algo: str = "dfs") -> None:
+        center_x, center_y = self.width // 2, self.height // 2
+        for direction in ("N", "E", "S", "W"):
+            self._safe_remove_wall(center_x, center_y, direction)
+
+    def generate(self, animation: bool = False, algo: str = "dfs") -> None:
+        self.grid = ([[Cell() for _ in range(self.width)]
+                      for _ in range(self.height)])
         self._apply_pattern_42()
         self._validate_entry_exit()
 
@@ -274,12 +311,40 @@ class MazeGenerator:
             self._generate_dfs()
 
         if self.perfect is False:
-            self._remove_dead_ends()
-            #self._ensure_no_dead_ends()
+            self._open_corners_and_center()
+            self._ensure_no_dead_ends()
+
+        if animation:
+            delay: float = 0.03
+            self.grid = ([[Cell() for _ in range(self.width)]
+                         for _ in range(self.height)])
+            for x, y, nx, ny, direction in self.generation_steps:
+                self.remove_wall(x, y, nx, ny, direction)
+                os.system("cls" if os.name == "nt" else "clear")
+                self.print_maze()
+                time.sleep(delay)
+        else:
+            self.print_maze()
 
         if not self.solve():
             raise ValueError("Maze could not be solved "
                              "after pattern application.")
+
+    def _path_to_directions(self, path: list[tuple[int, int]]) -> str:
+        directions = ""
+        for (x1, y1), (x2, y2) in zip(path, path[1:]):
+            if x2 == x1 + 1 and y2 == y1:
+                directions += "E"
+            elif x2 == x1 - 1 and y2 == y1:
+                directions += "W"
+            elif y2 == y1 + 1 and x2 == x1:
+                directions += "S"
+            elif y2 == y1 - 1 and x2 == x1:
+                directions += "N"
+            else:
+                raise ValueError(f"Non-adjacent path cells: "
+                                 f"({x1},{y1}) -> ({x2},{y2})")
+        return directions
 
     # test
     def print_maze(self) -> None:
@@ -295,7 +360,7 @@ class MazeGenerator:
             row = "\u2588"
             for x in range(self.width):
                 is_42 = (x - center_x, y - center_y) in pattern_coords
-                char = "\033[32m\u2588\033[0m" if is_42 else (" " if not self.grid[y][x].east else "\u2588")
+                # char = "\033[32m\u2588\033[0m" if is_42 else (" " if not self.grid[y][x].east else "\u2588")
                 row += ("\033[32m\u2588\033[0m" if is_42 else " ") + ("\u2588" if self.grid[y][x].east else " ")
             print(row)
 

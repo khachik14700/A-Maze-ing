@@ -1,7 +1,13 @@
 import sys
 
 from config_parser import load_config
-from maze import MazeGenerator
+from maze import MazeGenerator, Cell
+
+import os
+import time
+
+
+
 
 
 def main() -> None:
@@ -17,9 +23,7 @@ def main() -> None:
                              config.ENTRY, config.EXIT,
                              config.OUTPUT_FILE, config.PERFECT,
                              config.SEED)
-        maze.generate()
-        maze.print_maze()
-        maze.export_to_hex()
+        maze.generate(True)
     except Exception as er:
         print(er)
 
