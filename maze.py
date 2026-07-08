@@ -9,6 +9,7 @@ class Cell:
         self.south = True
         self.west = True
         self.visited = False
+        self.pattern = False
 
 
 class MazeGenerator:
@@ -16,12 +17,14 @@ class MazeGenerator:
                  height: int, entry: tuple[int, int],
                  exit: tuple[int, int],
                  output_file: str,
+                 perfect: bool = False,
                  seed: int | None = None) -> None:
         self.width = width
         self.height = height
         self.entry = entry
         self.exit = exit
         self.output_file = output_file
+        self.perfect = perfect
 
         if seed is not None:
             random.seed(seed)
@@ -70,14 +73,17 @@ class MazeGenerator:
             current.west = False
             neighbour.east = False
 
-    def generate(self) -> None:
+    def _generate_dfs(self) -> None:
         try:
             stack = []
 
-            start_x = random.randint(0, self.width - 1)
-            start_y = random.randint(0, self.height - 1)
+            while True:
+                start_x = random.randint(0, self.width - 1)
+                start_y = random.randint(0, self.height - 1)
 
-            current = self.grid[start_y][start_x]
+                current = self.grid[start_y][start_x]
+                if current.visited is False:
+                    break
             current.visited = True
 
             stack.append((start_x, start_y))
@@ -179,6 +185,7 @@ class MazeGenerator:
                 cell = self.grid[y][x]
                 cell.north = cell.east = cell.south = cell.west = True
                 cell.visited = True
+                cell.pattern = True
 
     def export_to_hex(self) -> None:
         with open(self.output_file, 'w') as file:
@@ -190,6 +197,89 @@ class MazeGenerator:
                            (4 if cell.south else 0) + (8 if cell.west else 0))
                     row_string += hex(val)[2:]
                 file.write(f"{row_string}\n")
+
+    def _remove_dead_ends(self) -> None:
+        dead_ends: list[tuple[int, int]] = self._find_all_dead_ends()
+        for x, y in dead_ends:
+            self._break_one_wall(x, y)
+
+    def _find_all_dead_ends(self) -> list[tuple[int, int]]:
+        result: list[tuple[int, int]] = []
+        for y in range(self.height):
+            for x in range(self.width):
+                cell = self.grid[y][x]
+                walls_count = sum([cell.north, cell.east,
+                                   cell.south, cell.west])
+                if walls_count == 3:
+                    result.append((x, y))
+        return result
+
+    def _break_one_wall(self, x: int, y: int) -> None:
+        cell = self.grid[y][x]
+
+        candidates = []
+        if y > 0 and cell.north and not self.grid[y-1][x].pattern:
+            candidates.append("N")
+        if x < self.width - 1 and cell.east and not self.grid[y][x+1].pattern:
+            candidates.append("E")
+        if (y < self.height - 1 and cell.south and not
+           self.grid[y+1][x].pattern):
+            candidates.append("S")
+        if x > 0 and cell.west and not self.grid[y][x-1].pattern:
+            candidates.append("W")
+
+        if candidates:
+            direction = random.choice(candidates)
+            if direction == "N":
+                x2, y2 = x, y - 1
+            elif direction == "E":
+                x2, y2 = x + 1, y
+            elif direction == "S":
+                x2, y2 = x, y + 1
+            else:
+                x2, y2 = x - 1, y
+            self.remove_wall(x, y, x2, y2, direction)
+
+    def _validate_entry_exit(self) -> None:
+        entry_x, entry_y = self.entry
+        exit_x, exit_y = self.exit
+
+        if self.grid[entry_y][entry_x].pattern:
+            raise ValueError("Entry point is inside the '42' pattern!")
+        if self.grid[exit_y][exit_x].pattern:
+            raise ValueError("Exit point is inside the '42' pattern!")
+
+    def _ensure_no_dead_ends(self) -> None:
+        while True:
+            dead_ends = self._find_all_dead_ends()
+            if not dead_ends:
+                break
+            for x, y in dead_ends:
+                self._break_one_wall(x, y)
+
+    def _open_corners_and_center(self) -> None:
+        corners = [(0, 0), (0, self.height - 1), (self.width - 1, 0),
+                   (self.width - 1, self.height - 1)]
+        center = (self.width // 2, self.height // 2)
+
+        for x, y in corners + [center]:
+            cell = self.grid[y][x]
+            cell.north = cell.east = cell.south = cell.west = False
+
+    def generate(self, algo: str = "dfs") -> None:
+        self._apply_pattern_42()
+        self._validate_entry_exit()
+
+        if algo == "dfs":
+            self._generate_dfs()
+
+        if self.perfect is False:
+            self._remove_dead_ends()
+            #self._ensure_no_dead_ends()
+
+        if not self.solve():
+            raise ValueError("Maze could not be solved "
+                             "after pattern application.")
 
     # test
     def print_maze(self) -> None:
@@ -205,8 +295,8 @@ class MazeGenerator:
             row = "\u2588"
             for x in range(self.width):
                 is_42 = (x - center_x, y - center_y) in pattern_coords
-                char = " " if is_42 else (" " if not self.grid[y][x].east else "\u2588")
-                row += (" " if is_42 else " ") + ("\u2588" if self.grid[y][x].east else " ")
+                char = "\033[32m\u2588\033[0m" if is_42 else (" " if not self.grid[y][x].east else "\u2588")
+                row += ("\033[32m\u2588\033[0m" if is_42 else " ") + ("\u2588" if self.grid[y][x].east else " ")
             print(row)
 
             row_bottom = "\u2588"

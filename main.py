@@ -15,8 +15,8 @@ def main() -> None:
     try:
         maze = MazeGenerator(config.WIDTH, config.HEIGHT,
                              config.ENTRY, config.EXIT,
-                             config.OUTPUT_FILE, config.SEED)
-        maze._apply_pattern_42()
+                             config.OUTPUT_FILE, config.PERFECT,
+                             config.SEED)
         maze.generate()
         maze.print_maze()
         maze.export_to_hex()
