@@ -59,6 +59,7 @@ class MazeGenerator:
         self.colour_index = 0
         self.pattern_colour_index = 0
         self.algorithm = algorithm
+        self.pattern = False
 
         if seed is not None:
             random.seed(seed)
@@ -346,8 +347,11 @@ class MazeGenerator:
 
         if (center_y + min_dy < 0 or center_y + max_dy >= self.height or
            center_x + min_dx < 0 or center_x + max_dx >= self.width):
-            raise ValueError("Maze is too small to fit the '42' pattern.")
+            print("Warning: Maze size is too small "
+                  "to display the '42' pattern.")
+            return
 
+        self.pattern = True
         for dx, dy in pattern_coords:
             y, x = center_y + dy, center_x + dx
             if 0 <= x < self.width and 0 <= y < self.height:
@@ -689,11 +693,14 @@ class MazeGenerator:
         and the '42' pattern.
         """
         center_y, center_x = self.height // 2, self.width // 2
-        pattern_coords = [
-            (-1, 0), (-1, 1), (-1, 2), (-2, 0), (-3, 0), (-3, -1), (-3, -2),
-            (1, 0), (3, -1), (1, -2), (2, -2), (3, -2), (2, 0), (3, 0),
-            (1, 1), (3, 2), (2, 2), (1, 2)
-        ]
+        pattern_coords = []
+        if self.pattern:
+            pattern_coords = [
+                (-1, 0), (-1, 1), (-1, 2), (-2, 0), (-3, 0),
+                (-3, -1), (-3, -2),
+                (1, 0), (3, -1), (1, -2), (2, -2), (3, -2), (2, 0), (3, 0),
+                (1, 1), (3, 2), (2, 2), (1, 2)
+            ]
 
         reset = "\033[0m"
         wall_colour = self.wall_colours[self.colour_index]

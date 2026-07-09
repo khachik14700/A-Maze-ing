@@ -1,7 +1,7 @@
 import sys
 import os
 from config_parser import load_config
-from maze import MazeGenerator
+from mazegen import MazeGenerator
 
 
 def choice() -> int:
