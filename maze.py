@@ -29,6 +29,12 @@ class MazeGenerator:
         self.perfect = perfect
         self.generation_steps: list[tuple[int, int, int, int, str]] = []
 
+        self.show_path = False
+        self.wall_colours = ["\033[37m", "\033[36m", "\033[35m",
+                             "\033[33m", "\033[34m"]
+
+        self.colour_index = 0
+
         if seed is not None:
             random.seed(seed)
 
@@ -109,6 +115,9 @@ class MazeGenerator:
             print(f"An unexpected error occurred "
                   f"during maze generation: {er}")
             raise
+
+    def _generate_prim(self) -> None:
+        pass
 
     def get_valid_neighbors(self,
                             cord: tuple[int, int]) -> list[tuple[int, int]]:
@@ -323,8 +332,7 @@ class MazeGenerator:
                 os.system("cls" if os.name == "nt" else "clear")
                 self.print_maze()
                 time.sleep(delay)
-        else:
-            self.print_maze()
+            os.system("cls" if os.name == "nt" else "clear")
 
         if not self.solve():
             raise ValueError("Maze could not be solved "
@@ -346,7 +354,14 @@ class MazeGenerator:
                                  f"({x1},{y1}) -> ({x2},{y2})")
         return directions
 
-    # test
+    def show_hide_shortest_path(self) -> None:
+        self.show_path = not self.show_path
+        self.print_maze()
+
+    def rotate_wall_colours(self) -> None:
+        self.colour_index = (self.colour_index + 1) % len(self.wall_colours)
+        self.print_maze()
+
     def print_maze(self) -> None:
         center_y, center_x = self.height // 2, self.width // 2
         pattern_coords = [
@@ -355,16 +370,57 @@ class MazeGenerator:
             (1, 1), (3, 2), (2, 2), (1, 2)
         ]
 
-        print("\u2588" * (self.width * 2 + 1))
+        reset = "\033[0m"
+        wall_colour = self.wall_colours[self.colour_index]
+        pattern_colour = "\033[32m"
+        entry_colour = "\033[44m"
+        exit_colour = "\033[41m"
+        path_colour = "\033[43m"
+        wall_block = f"{wall_colour}\u2588{reset}"
+
+        path_cells: set[tuple[int, int]] = set()
+        path_edges = set()
+        if self.show_path:
+            solution = self.solve()
+            path_cells = set(solution)
+            for a, b in zip(solution, solution[1:]):
+                path_edges.add((a, b))
+                path_edges.add((b, a))
+
+        print(wall_block * (self.width * 2 + 1))
         for y in range(self.height):
-            row = "\u2588"
+            row = wall_block
             for x in range(self.width):
                 is_42 = (x - center_x, y - center_y) in pattern_coords
-                # char = "\033[32m\u2588\033[0m" if is_42 else (" " if not self.grid[y][x].east else "\u2588")
-                row += ("\033[32m\u2588\033[0m" if is_42 else " ") + ("\u2588" if self.grid[y][x].east else " ")
+                if (x, y) == self.entry:
+                    floor = f"{entry_colour} {reset}"
+                elif (x, y) == self.exit:
+                    floor = f"{exit_colour} {reset}"
+                elif (x, y) in path_cells:
+                    floor = f"{path_colour} {reset}"
+                elif is_42:
+                    floor = f"{pattern_colour}\u2588{reset}"
+                else:
+                    floor = " "
+
+                if self.grid[y][x].east:
+                    side = wall_block
+                elif ((x, y), (x + 1, y)) in path_edges:
+                    side = f"{path_colour} {reset}"
+                else:
+                    side = " "
+                # side = wall_block if self.grid[y][x].east else " "
+                row += floor + side
             print(row)
 
-            row_bottom = "\u2588"
+            row_bottom = wall_block
             for x in range(self.width):
-                row_bottom += ("\u2588" if self.grid[y][x].south else " ") + "\u2588"
+                if self.grid[y][x].south:
+                    below = wall_block
+                elif ((x, y), (x, y + 1)) in path_edges:
+                    below = f"{path_colour} {reset}"
+                else:
+                    below = " "
+                # below = wall_block if self.grid[y][x].south else " "
+                row_bottom += below + wall_block
             print(row_bottom)

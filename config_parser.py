@@ -1,6 +1,7 @@
 from pydantic import (BaseModel, Field, field_validator,
                       model_validator, ValidationError)
 from typing import Any, Optional
+import sys
 
 
 class Configs(BaseModel):
@@ -42,23 +43,33 @@ class Configs(BaseModel):
             raise ValueError("Entry coordinates out of bounds")
         if (self.EXIT[0] >= self.WIDTH) | (self.EXIT[1] >= self.HEIGHT):
             raise ValueError("Exit coordinates out of bounds")
+        if (self.ENTRY == self.EXIT):
+            raise ValueError("Entry and exit coordinates must be different")
         return self
 
 
 def load_config(filename: str) -> Configs:
     data: dict[str, Any] = {}
-    with open(filename) as file:
-        for line in file:
-            line = line.strip()
+    try:
+        with open(filename) as file:
+            for line in file:
+                line = line.strip()
 
-            if not line or line.startswith('#'):
-                continue
+                if not line or line.startswith('#'):
+                    continue
 
-            if '=' not in line:
-                raise ValueError("Invalid line format")
+                if '=' not in line:
+                    raise ValueError("Invalid line format")
 
-            key, value = line.split('=', 1)
-            data[key] = value
+                key, value = line.split('=', 1)
+                data[key] = value
+    except OSError as er:
+        print(f"Cannot read configuration file '{filename}': {er}")
+        sys.exit(1)
+    except ValueError as er:
+        print(f"Configuration file error: {er}")
+        sys.exit(1)
+
     try:
         ret = Configs.model_validate(data)
         return ret
@@ -72,4 +83,4 @@ def load_config(filename: str) -> Configs:
                 print(f"- Parameter '{loc}' is not a valid setting.")
             else:
                 print(f"- {loc}: {msg}")
-        exit(1)
+        sys.exit(1)
