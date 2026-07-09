@@ -11,11 +11,25 @@ class Configs(BaseModel):
     EXIT: tuple[int, int]
     OUTPUT_FILE: str
     PERFECT: bool
+    ALGORITHM: str = "dfs"
     SEED: Optional[int] = None
     model_config = {'extra': 'forbid'}
 
     @field_validator('ENTRY', 'EXIT', mode='before')
     def cord_validator(cls: "Configs", v: Any) -> Any:
+        """
+        Validates the entry and exit coordinates string format.
+
+        Args:
+            v (Any): The input value, expected to be a string in "x,y" format
+                or a tuple of two integers.
+
+        Returns:
+            Any: A tuple of two integers (x, y).
+
+        Raises:
+            ValueError: If the format is invalid or values are not integers.
+        """
         if isinstance(v, str):
             splited = v.split(',')
             if len(splited) != 2:
@@ -35,6 +49,18 @@ class Configs(BaseModel):
 
     @model_validator(mode="after")
     def mod_validator(self) -> "Configs":
+        """
+        Performs post-validation checks on the maze configuration model.
+
+        Checks if coordinates are non-negative, within maze bounds,
+        and ensures entry and exit points are distinct.
+
+        Returns:
+            Configs: The validated configuration object.
+
+        Raises:
+            ValueError: If any constraint validation fails.
+        """
         if self.ENTRY[0] < 0 or self.ENTRY[1] < 0:
             raise ValueError("Entry coordinates must be non-negative")
         if self.EXIT[0] < 0 or self.EXIT[1] < 0:
@@ -49,6 +75,21 @@ class Configs(BaseModel):
 
 
 def load_config(filename: str) -> Configs:
+    """
+    Loads and parses the maze configuration file.
+
+    Reads a file with KEY=VALUE pairs, ignores lines starting with '#',
+    and validates the content against the Configs model.
+
+    Args:
+        filename (str): The path to the configuration file.
+
+    Returns:
+        Configs: A validated Configs instance.
+
+    Raises:
+        SystemExit: If the file cannot be read or configuration is invalid.
+    """
     data: dict[str, Any] = {}
     try:
         with open(filename) as file:
