@@ -1,7 +1,60 @@
+"""mazegen — a maze generator and solver.
+
+Generates a rectangular maze (DFS or Prim's algorithm), optionally
+carves a decorative '42' pattern into it, solves it with BFS, and
+can export it to a compact hex-encoded text format.
+
+Basic usage
+-----------
+    from mazegen import MazeGenerator
+
+    maze = MazeGenerator(width=10, height=10, entry=(0, 0), exit=(9, 9))
+    maze.generate()
+    path = maze.solve()
+
+Custom parameters
+-----------------
+    maze = MazeGenerator(
+        width=40, height=20,
+        entry=(0, 0), exit=(39, 19),
+        output_file="out.txt",   # optional, needed only for export_to_hex()
+        algorithm="prim",        # "dfs" (default) or "prim"
+        perfect=True,            # True = single-path perfect maze
+        seed=42,                 # reproducible generation
+    )
+    maze.generate()
+
+Accessing the generated structure
+----------------------------------
+`maze.grid` is a 2D list of `Cell` objects, indexed `grid[y][x]`.
+Each cell has boolean `.north`, `.east`, `.south`, `.west`
+(True = wall present / closed) and `.pattern` (True if the cell is
+part of the reserved '42' pattern and must stay fully walled).
+
+    cell = maze.grid[0][0]
+    if cell.north:
+        print("There is a wall to the north of (0, 0)")
+
+Accessing the solution
+-----------------------
+`maze.solve()` returns the shortest entry-to-exit path as an
+ordered list of (x, y) coordinate tuples:
+
+    path = maze.solve()
+    # e.g. [(0, 0), (1, 0), (1, 1), ..., (9, 9)]
+
+Note: `maze.export_to_hex()` writes the maze to `output_file` in a
+different, on-disk hex format (N=1, E=2, S=4, W=8 per cell,
+followed by entry, exit, and the solution path as N/E/S/W
+letters). That file format is NOT the same as the in-memory
+`.grid`/`.solve()` API above — use `.grid` and `.solve()` directly
+for in-process access to the structure.
+"""
 import random
 from collections import deque
 import os
 import time
+from typing import Any
 
 
 class Cell:
@@ -26,7 +79,7 @@ class MazeGenerator:
     def __init__(self, width: int,
                  height: int, entry: tuple[int, int],
                  exit: tuple[int, int],
-                 output_file: str,
+                 output_file: str | None = None,
                  algorithm: str = "dfs",
                  perfect: bool = False,
                  seed: int | None = None) -> None:
@@ -38,10 +91,12 @@ class MazeGenerator:
             height (int): Number of cells vertically.
             entry (tuple[int, int]): Start coordinates (x, y).
             exit (tuple[int, int]): End coordinates (x, y).
-            output_file (str): Path to save the hexadecimal representation.
+            output_file (str | None): Path to save the hexadecimal
+                representation. Only required if export_to_hex() will
+                be called; leave as None for in-memory-only use.
             algorithm (str): Generation algorithm ('dfs' or 'prim').
             perfect (bool): If True, generates a maze with a single path.
-            seed (int | None): Optional seed for random number generation.
+            seed (int | None): Optional seed for reproducible generation.
         """
         self.width = width
         self.height = height
@@ -276,7 +331,8 @@ class MazeGenerator:
 
         return neighbors
 
-    def _reconstruct_path(self, parent: dict,
+    def _reconstruct_path(self, parent: dict[tuple[int, int],
+                                             Any],
                           exit: tuple[int, int]) -> list[tuple[int, int]]:
         """
         Reconstructs the path from exit to entry using a parent dictionary.
@@ -365,6 +421,11 @@ class MazeGenerator:
         Exports the current maze structure to the specified output file
         in a compact hexadecimal representation.
         """
+        if self.output_file is None:
+            raise ValueError(
+                "output_file was not set; pass one to the constructor "
+                "or set maze.output_file before calling export_to_hex()."
+                )
         path = self.solve()
         if not path:
             raise ValueError("Cannot export: maze has no valid solution "
@@ -471,14 +532,16 @@ class MazeGenerator:
 
     def _safe_remove_wall(self, x: int, y: int, direction: str) -> None:
         """
-        Removes a wall only if it does not create an illegal 3x3 open area.
+        Removes the wall between (x, y) and its neighbour in the given
+        direction, but only if the neighbour is in bounds, neither cell
+        belongs to the '42' pattern, and removing it would not create
+        an illegal 3x3 fully-open area. Does nothing otherwise.
 
         Args:
-            x1, y1, x2, y2 (int): Coordinates of the cells.
-            direction (str): Direction of the wall.
-
-        Returns:
-            bool: True if the wall was removed, False otherwise.
+            x (int): X coordinate of the cell.
+            y (int): Y coordinate of the cell.
+            direction (str): Direction of the wall to remove
+                ('N', 'E', 'S', 'W').
         """
         offsets = {"N": (0, -1), "S": (0, 1), "E": (1, 0), "W": (-1, 0)}
         if direction not in offsets:
@@ -556,12 +619,16 @@ class MazeGenerator:
     def _close_wall(self, x1: int, y1: int, x2: int,
                     y2: int, direction: str) -> None:
         """
-        Closes the wall in a specific direction for a given cell.
+        Restores (closes) the wall between two adjacent cells — the
+        inverse operation of remove_wall(). Used internally to
+        temporarily test a wall removal without permanently mutating
+        the grid (see _creates_wide_open_area).
 
         Args:
-            x (int): X coordinate.
-            y (int): Y coordinate.
-            direction (str): 'N', 'E', 'S', or 'W'.
+            x1, y1 (int): Coordinates of the first cell.
+            x2, y2 (int): Coordinates of the neighbouring cell.
+            direction (str): Direction of the wall to close, from the
+                first cell's perspective ('N', 'E', 'S', 'W').
         """
         current = self.grid[y1][x1]
         neighbour = self.grid[y2][x2]

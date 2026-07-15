@@ -86,9 +86,6 @@ def main() -> None:
         return
 
     config_file = sys.argv[1]
-    if config_file != "config.txt":
-        print("Error: The configuration file must be named 'config.txt'")
-        sys.exit(1)
 
     if not os.path.exists(config_file):
         print(f"Error: The file '{config_file}' was not found.")
